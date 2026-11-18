@@ -1,6 +1,9 @@
-# Kona328 to Nano ESP32 UART link
+# Arduino Uno Code
 
-The Kona328 sends subsystem readings to the Nano ESP32 over UART (SoftwareSerial, 9600 baud).
+This repo is for the Arduino Uno (Kona328) code, i.e. the main controller, connected to each subsystem and linked to the ESP32.
+It sends subsystem readings to the Nano ESP32 over UART (SoftwareSerial, 9600 baud).
+
+## Setup
 
 The folder name must match the `.ino` name. Open the `.ino` in the Arduino IDE; the other files appear as tabs and compile automatically.
 
