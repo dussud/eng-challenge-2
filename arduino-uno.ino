@@ -1,14 +1,17 @@
-#include "KonaLink.h"
+#include "UARTLink.h"
+#include "Stirring.h"
 
 void setup() {
   Serial.begin(9600);
-  konaLinkBegin();
+  UARTLinkBegin();
 
   // Subsystem setup calls go here
+  stirringSetup();
 }
 
 void loop() {
-  konaLinkCheckIncoming();
+  UARTLinkCheckIncoming();
 
   // Subsystem update calls go here
+  stirringUpdate();
 }
