@@ -93,13 +93,28 @@ void loop() {
 }
 ```
 
-## Receiving on the ESP32
+## Reading a setpoint
 
-Each line arrives as `NAME:value`. Split on `:` to know which subsystem it came from:
+Setpoints from the dashboard arrive automatically (the ESP32 forwards them, and `UARTLinkCheckIncoming()` stores them). Read them in your subsystem:
 
 ```cpp
-String line = Serial0.readStringUntil('\n');
-int sep = line.indexOf(':');
-String name = line.substring(0, sep);
-float value = line.substring(sep + 1).toFloat();
+float target = getSetpoint("TEMP");   // or "PH" / "STIR"
+if (!isnan(target)) {
+  // control towards target
+}
 ```
+
+It returns `NAN` until the first setpoint has been received.
+
+## Link protocol
+
+One message per line, 9600 baud:
+
+| Direction | Message | Meaning |
+|---|---|---|
+| Uno → ESP32 | `TEMP:23.50` | Reading (`TEMP` / `PH` / `STIR`) |
+| Uno → ESP32 | `READY` | Sent at boot; the ESP32 replies with every known setpoint |
+| ESP32 → Uno | `SET:TEMP:30.00` | New setpoint |
+| Uno → ESP32 | `ACK:TEMP:30.00` | Setpoint applied; the ESP32 resends every 3 s until it gets this |
+
+The ESP32 maps the names to MQTT: `TEMP` ↔ `temperature`, `PH` ↔ `ph`, `STIR` ↔ `rpm`, and publishes readings to `bioreactor/team13/telemetry/<param>` every 2 s (readings older than 10 s are not published).
