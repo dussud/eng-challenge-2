@@ -5,7 +5,6 @@
 // Needs a 470 uF capacitor across 5V/GND and a 1N4001 diode across the motor
 
 #include <Arduino.h>
-#include "UARTLink.h"
 #include "Stirring.h"
 
 // Motor (plant) and sensor constants
@@ -25,8 +24,7 @@ static const float Kp = (2 * zeta * wn / wo - 1) / Kv;
 static const float KI = wn * wn / Kv / wo;
 static const float freqtoRPM = 60 / Npulses;
 
-// Setpoint - set here for now, later it comes from the dashboard
-static const float SETPOINT_RPM = 500;
+// Setpoint limits
 static const float SET_MIN = 300, SET_MAX = 1000;
 
 // Pins
@@ -38,7 +36,6 @@ static const long PRINT_INTERVAL = 100000;  // 100 ms
 // Variables
 static float measspeed, meanmeasspeed, error, KIinterror, deltaT, setspeed;
 static long currtime, prevtime, T1, Tprint;
-// static long Tsend;          // LINK
 static int Vmotor;
 
 // Shared with the interrupt, so volatile
@@ -55,11 +52,12 @@ void stirringSetup() {
 
   TCCR1A = 0b00000011;  // 10-bit PWM on D9/D10
   TCCR1B = 0b00000001;  // 7.8 kHz
-
-  setspeed = constrain(SETPOINT_RPM, SET_MIN, SET_MAX);
 }
 
-void stirringUpdate() {
+void stirringUpdate(float setpoint) {
+  if (isnan(setpoint) || setpoint == 0) { setspeed = 0; }  // no setpoint yet, or 0 = stop
+  else { setspeed = constrain(setpoint, SET_MIN, SET_MAX); }
+
   currtime = micros();
   deltaT = (currtime - prevtime) * 1e-6;  // time since last update, for integration
 
@@ -95,12 +93,11 @@ void stirringUpdate() {
     Serial.print(",Speed:");
     Serial.println(meanmeasspeed, 0);
   }
+}
 
-  // LINK
-  // if (currtime - Tsend > 0) {
-  //   Tsend = Tsend + 1000000;
-  //   sendReading("STIR", (int)round(meanmeasspeed));
-  // }
+// Measured (smoothed) speed in RPM
+float stirringSpeed() {
+  return meanmeasspeed;
 }
 
 // Interrupt: measures the time between sensor pulses
@@ -114,11 +111,3 @@ static void freqcount() {
   }
 }
 
-// LINK
-// void stirringHandleLine(const char *line) {
-//   if (strncmp(line, "STIR_SET:", 9) == 0) {
-//     float newSet = atof(line + 9);
-//     if (newSet == 0) { setspeed = 0; }                       // 0 = stop
-//     else { setspeed = constrain(newSet, SET_MIN, SET_MAX); }
-//   }
-// }

@@ -67,6 +67,8 @@ void loop() {
   deltat = (currtime - prevtime) * 1e-6;  // time since last update, for integration
 
   // UARTLinkCheckIncoming();   // LINK
+  // float target = getSetpoint("STIR");   // LINK
+  // if (!isnan(target)) { setspeed = (target == 0) ? 0 : constrain(target, SET_MIN, SET_MAX); }   // LINK
 
   if (currtime - T1 > 0) {
     prevtime = currtime;
@@ -119,11 +121,3 @@ void IRAM_ATTR Tsense() {
   }
 }
 
-// LINK
-// void handleLinkLine(const char *line) {
-//   if (strncmp(line, "STIR_SET:", 9) == 0) {
-//     float newSet = atof(line + 9);
-//     if (newSet == 0) { setspeed = 0; }                       // 0 = stop
-//     else { setspeed = constrain(newSet, SET_MIN, SET_MAX); }
-//   }
-// }

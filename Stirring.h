@@ -2,6 +2,7 @@
 #define STIRRING_H
 
 void stirringSetup();
-void stirringUpdate();
+void stirringUpdate(float setpoint);
+float stirringSpeed();
 
 #endif
