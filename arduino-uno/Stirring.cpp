@@ -4,6 +4,8 @@
 // Wiring: Hall sensor signal -> D2, MOSFET gate -> D10
 // Needs a 470 uF capacitor across 5V/GND and a 1N4001 diode across the motor
 
+#define DEBUG 0
+
 #include <Arduino.h>
 #include "Stirring.h"
 
@@ -54,7 +56,9 @@ void stirringSetup() {
   TCCR1B = 0b00000001;  // 7.8 kHz
 }
 
-void stirringUpdate(float setpoint) {
+// Runs the PI controller every 10 ms and returns the measured (smoothed) speed in RPM.
+// Call on every loop(); between control periods it just returns the last value.
+float stirringUpdate(float setpoint) {
   if (isnan(setpoint) || setpoint == 0) { setspeed = 0; }  // no setpoint yet, or 0 = stop
   else { setspeed = constrain(setpoint, SET_MIN, SET_MAX); }
 
@@ -86,6 +90,7 @@ void stirringUpdate(float setpoint) {
     meanmeasspeed = 0.1 * measspeed + 0.9 * meanmeasspeed;
   }
 
+  #if DEBUG
   if (currtime - Tprint > 0) {
     Tprint = Tprint + PRINT_INTERVAL;
     Serial.print("Min:0,Max:1100,Set:");
@@ -93,10 +98,8 @@ void stirringUpdate(float setpoint) {
     Serial.print(",Speed:");
     Serial.println(meanmeasspeed, 0);
   }
-}
+  #endif
 
-// Measured (smoothed) speed in RPM
-float stirringSpeed() {
   return meanmeasspeed;
 }
 
@@ -110,4 +113,3 @@ static void freqcount() {
     if (2 * trig >= Npulses) { trig = 0; digitalWrite(13, !digitalRead(13)); }
   }
 }
-

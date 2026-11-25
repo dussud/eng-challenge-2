@@ -1,7 +1,10 @@
 #include "UARTLink.h"
 #include "Stirring.h"
 
-unsigned long lastStirSendMs = 0;
+const unsigned long REPORT_INTERVAL_MS = 2000;
+unsigned long lastReportMs = 0;
+
+float stirReading = NAN;
 
 void setup() {
   Serial.begin(9600);
@@ -14,13 +17,10 @@ void setup() {
 void loop() {
   UARTLinkCheckIncoming();
 
-  // Subsystem update calls go here.
-  // Read targets with getSetpoint("TEMP") / getSetpoint("PH") / getSetpoint("STIR")
-  // (NAN until the dashboard has sent one), and send readings with
-  // sendReading("TEMP", temperature) etc.
-  stirringUpdate(getSetpoint("STIR"));
-  if (millis() - lastStirSendMs >= 1000) {
-    lastStirSendMs = millis();
-    sendReading("STIR", (int)round(stirringSpeed()));
+  stirReading = stirringUpdate(getSetpoint("STIR"));
+
+  if (millis() - lastReportMs >= REPORT_INTERVAL_MS) {
+    lastReportMs = millis();
+    if (!isnan(stirReading)) sendReading("STIR", (int)round(stirReading));
   }
 }

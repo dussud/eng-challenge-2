@@ -20,26 +20,20 @@ The Uno does all the control. The ESP32 only translates between the UART link an
 
 ## Getting started
 
-Each sketch folder must keep the same name as its `.ino` (an Arduino IDE rule). Open the `.ino` and the other files in that folder appear as tabs and compile with it. Subfolders are ignored, so the sketches don't interfere with each other.
+Each sketch folder must keep the same name as its `.ino` (Arduino IDE).
 
 | Sketch | Board (Arduino IDE) | Libraries |
 |---|---|---|
-| `arduino-uno/arduino-uno.ino` | Arduino Uno | none (SoftwareSerial is built in) |
+| `arduino-uno/arduino-uno.ino` | Arduino Uno | none |
 | `arduino-nano/arduino-nano.ino` | Arduino Nano ESP32 (esp32 core) | PicoMQTT |
 
 ### Secrets (Nano only)
 
-Wi-Fi and MQTT credentials go in `arduino-nano/arduino_secrets.h`, which is gitignored:
-
-```bash
-cp arduino-nano/arduino_secrets.example.h arduino-nano/arduino_secrets.h
-```
-
-Then fill in your values. For eduroam, set `SECRET_WIFI_USERNAME` to your full login; leave it as `""` for a normal WPA2 network. **Never commit `arduino_secrets.h`.**
+Wi-Fi and MQTT credentials go in `arduino-nano/arduino_secrets.h`. Copy the `arduino-nano/arduino_secrets.example.h` file, fill in your credentials and rename it. (don't commit it pls)
 
 ### Node-RED
 
-Import `nodered/bioreactor-flow.json` (Menu → Import), set the MQTT broker node to your broker, and deploy. It needs `@flowfuse/node-red-dashboard` (Dashboard 2.0). The topics are under `bioreactor/team13/` and must match `TOPIC_BASE` in `arduino-nano.ino`.
+Import `nodered/bioreactor-flow.json` (Menu → Import), set the MQTT broker node to `mqtt.dussud.org`, and deploy. It needs `@flowfuse/node-red-dashboard` (Dashboard 2.0). The topics are under `bioreactor/team13/` and must match `TOPIC_BASE` in `arduino-nano.ino`.
 
 ## Wiring: Uno ↔ Nano ESP32
 
@@ -82,8 +76,8 @@ Kona D3 ──[ 1kΩ ]──┬── ESP32 D0
 
 ### Behaviour
 
-- **Setpoint delivery:** the ESP32 resends a setpoint every 3 s until it receives an `ACK` with the same value (within 0.005). A lost line on the link therefore only delays a setpoint; it is never dropped.
-- **Uno reboot:** the Uno sends `READY` from `UARTLinkBegin()`. The ESP32 replies with `SET` for every known setpoint, so the Uno gets its targets back without the dashboard doing anything.
+- **Setpoint delivery:** the ESP32 resends a setpoint every 3 s until it receives an `ACK` with the same value (within 0.005). 
+- **Uno reboot:** the Uno sends `READY` from `UARTLinkBegin()`. The ESP32 replies with `SET` for every known setpoint, so the Uno gets its targets back.
 - **ESP32 reboot:** setpoints are retained on the broker, so the ESP32 gets them again when it subscribes and forwards them to the Uno.
 - **Readings:** the Uno can send readings as often as it likes. The ESP32 keeps the latest value per name and publishes it every 2 s. Readings older than 10 s are not published, so a dead subsystem disappears from the dashboard instead of showing a stale value.
 - **Unknown names** are ignored by both sides (and logged on the ESP32's USB serial).
@@ -100,95 +94,131 @@ Kona D3 ──[ 1kΩ ]──┬── ESP32 D0
 
 ## Writing Uno subsystem code
 
+### The subsystem interface
+
+Every subsystem is a pair of files in `arduino-uno/` (e.g. `Heating.h` / `Heating.cpp`) exposing exactly two functions:
+
+```cpp
+void heatingSetup();                   // called once from setup(): pins, timers, interrupts
+float heatingUpdate(float setpoint);   // called on every loop(): controls, returns latest reading
+```
+
+- `xxxSetup()` takes no arguments and runs once.
+- `xxxUpdate(setpoint)` receives the current setpoint each time and returns the latest reading (°C, pH or RPM). `setpoint` is `NAN` until the dashboard has sent one, so the subsystem must handle that (e.g. stay off).
+- Subsystems **don't talk to the link**. They never call `sendReading()` or `getSetpoint()` and don't include `UARTLink.h`. The main controller (`arduino-uno.ino`) handles communication.
+
+### Timing: call fast, report slowly
+
+There are two separate rates: 
+
+| What | Rate | Who handles it |
+|---|---|---|
+| Control (reading sensors, PI/PID, driving outputs) | As fast as the subsystem needs, e.g. every 10 ms for stirring | Inside `xxxUpdate()`, with its own `millis()`/`micros()` timer |
+| Reporting readings to the ESP32 | Every 2 s | The main loop, with one `millis()` timer |
+
+So `xxxUpdate()` is called on **every** `loop()` pass. Inside `xxxUpdate()`, check whether your control period has elapsed; if it hasn't, just return the last reading.
+
+The main loop keeps the value each update returns and sends the latest one every 2 s. Readings are therefore never sent from inside a subsystem.
+
 ### Rules
 
-1. Use the subsystem names `TEMP` / `PH` / `STIR`.
-2. Send one reading per `sendReading()` call.
-3. Pins **D0, D1, D3 and D7** are taken by USB (D0/D1) and the link (TX D3, RX D7). D2 is the stirring Hall sensor (hardware interrupt INT0).
-4. Don't create your own SoftwareSerial for the link.
-5. Avoid long `delay()` calls, since they hold up everyone's readings. Use `millis()` timing (see the example).
-6. Use `Serial.print()` for your own debugging; it only goes to the laptop.
+1. Use the subsystem names `TEMP` / `PH` / `STIR` in the main loop.
+2. Pins **D0, D1, D3 and D7** are taken by USB (D0/D1) and the link (TX D3, RX D7). D2 is the stirring Hall sensor (hardware interrupt INT0).
+3. Don't create your own SoftwareSerial for the link.
+4. `xxxUpdate()` must return quickly: no `delay()` and no waiting loops, since they hold up every other subsystem. Use `millis()` timing.
+5. Use `Serial.print()` for your own debugging; it only goes to the laptop. Keep it light (e.g. every 100 ms or more), since printing is slow.
 
-### Sending a reading
-
-```cpp
-sendReading("TEMP", temperature);
-```
-
-This sends `TEMP:23.50` to the ESP32 and copies it to the Serial Monitor as `[sent] TEMP:23.50`. It accepts `int`, `long`, `unsigned long` and `float` values.
-
-### Reading a setpoint
-
-Setpoints from the dashboard arrive automatically: the ESP32 forwards them, and `UARTLinkCheckIncoming()` stores them. Read them in your subsystem:
-
-```cpp
-float target = getSetpoint("TEMP");   // or "PH" / "STIR"
-if (!isnan(target)) {
-  // control towards target
-}
-```
-
-It returns `NAN` until the first setpoint has been received.
-
-### Adding a subsystem (example)
-
-Put your code in its own pair of files in `arduino-uno/` (see `Stirring.h` / `Stirring.cpp`).
+### Example subsystem
 
 ```cpp
 // Example.h
 #ifndef EXAMPLE_H
 #define EXAMPLE_H
 void exampleSetup();
-void exampleUpdate();
+float exampleUpdate(float setpoint);
 #endif
 ```
 
 ```cpp
 // Example.cpp
 #include <Arduino.h>
-#include "UARTLink.h"
 #include "Example.h"
 
-static const uint8_t EXAMPLE_PIN = A0;
-static const unsigned long EXAMPLE_INTERVAL_MS = 1000;
-static unsigned long lastMs = 0;
+static const uint8_t SENSOR_PIN = A0;
+static const uint8_t OUTPUT_PIN = 5;
+static const unsigned long CONTROL_PERIOD_MS = 100;
+
+static unsigned long lastControlMs = 0;
+static float reading = NAN;
 
 void exampleSetup() {
-  pinMode(EXAMPLE_PIN, INPUT);
+  pinMode(SENSOR_PIN, INPUT);
+  pinMode(OUTPUT_PIN, OUTPUT);
 }
 
-void exampleUpdate() {
-  if (millis() - lastMs >= EXAMPLE_INTERVAL_MS) {
-    lastMs = millis();
-    sendReading("EXAMPLE", analogRead(EXAMPLE_PIN));
+float exampleUpdate(float setpoint) {
+  if (millis() - lastControlMs < CONTROL_PERIOD_MS) return reading;  // not time yet
+  lastControlMs = millis();
+
+  reading = analogRead(SENSOR_PIN) * (5.0 / 1023);   // convert to real units
+
+  if (isnan(setpoint)) {
+    digitalWrite(OUTPUT_PIN, LOW);                   // no setpoint yet: stay off
+  } else {
+    digitalWrite(OUTPUT_PIN, reading < setpoint);    // simple on/off control
   }
+  return reading;
 }
 ```
 
-Then register it in `arduino-uno.ino`:
+### Main controller (`arduino-uno.ino`)
 
 ```cpp
 #include "UARTLink.h"
+#include "Stirring.h"
 #include "Example.h"
+
+const unsigned long REPORT_INTERVAL_MS = 2000;
+unsigned long lastReportMs = 0;
+
+float stirReading = NAN;
+float exampleReading = NAN;
 
 void setup() {
   Serial.begin(9600);
   UARTLinkBegin();
+
+  stirringSetup();
   exampleSetup();
 }
 
 void loop() {
-  UARTLinkCheckIncoming();
-  exampleUpdate();
+  UARTLinkCheckIncoming();   // receive setpoints from the ESP32
+
+  // Control: every pass
+  stirReading    = stirringUpdate(getSetpoint("STIR"));
+  exampleReading = exampleUpdate(getSetpoint("TEMP"));
+
+  // Reporting: every 2 s
+  if (millis() - lastReportMs >= REPORT_INTERVAL_MS) {
+    lastReportMs = millis();
+    if (!isnan(stirReading))    sendReading("STIR", stirReading);
+    if (!isnan(exampleReading)) sendReading("TEMP", exampleReading);
+  }
 }
 ```
+
+### Link functions (main controller only)
+
+- `sendReading("TEMP", value)` sends `TEMP:23.50` to the ESP32 and echoes `[sent] TEMP:23.50` on the Serial Monitor. It accepts `int`, `long`, `unsigned long` and `float`.
+- `getSetpoint("TEMP")` returns the latest setpoint from the dashboard, or `NAN` until one has arrived. `UARTLinkCheckIncoming()` fills these in, so call it at the top of every `loop()`.
 
 ## Subsystems
 
 | Subsystem | Files | Pins | Status |
 |---|---|---|---|
-| Stirring (PI speed control) | `arduino-uno/Stirring.*` | Hall sensor D2, MOSFET gate D10 | Integrated; setpoint from `getSetpoint("STIR")`, clamped to 300–1000 RPM (0 = stop) |
+| Stirring (PI speed control) | `arduino-uno/Stirring.*` | Hall sensor D2, MOSFET gate D10 | Integrated; PI runs every 10 ms, setpoint clamped to 300–1000 RPM (0 = stop) |
 | Heating | | | To do |
 | pH | | | To do |
 
-The sketches in `tests/` run a subsystem on its own, without the link. They're for tuning on the bench.
+The sketches in `tests/` run a subsystem on its own without the link.
