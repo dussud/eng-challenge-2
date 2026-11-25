@@ -1,0 +1,798 @@
+[
+  {
+    "id": "broker",
+    "type": "mqtt-broker",
+    "name": "Bioreactor broker",
+    "broker": "localhost",
+    "port": "1883",
+    "clientid": "",
+    "autoConnect": true,
+    "usetls": false,
+    "protocolVersion": "4",
+    "keepalive": "60",
+    "cleansession": true,
+    "autoUnsubscribe": true,
+    "birthTopic": "",
+    "birthQos": "0",
+    "birthPayload": "",
+    "birthMsg": {},
+    "closeTopic": "",
+    "closeQos": "0",
+    "closePayload": "",
+    "closeMsg": {},
+    "willTopic": "",
+    "willQos": "0",
+    "willPayload": "",
+    "willMsg": {},
+    "userProps": "",
+    "sessionExpiry": ""
+  },
+  {
+    "id": "ui_base",
+    "type": "ui-base",
+    "name": "Bioreactor",
+    "path": "/dashboard",
+    "includeClientData": true,
+    "acceptsClientConfig": [
+      "ui-notification",
+      "ui-control"
+    ],
+    "showPathInSidebar": false,
+    "navigationStyle": "default"
+  },
+  {
+    "id": "ui_theme",
+    "type": "ui-theme",
+    "name": "Bioreactor theme",
+    "colors": {
+      "surface": "#ffffff",
+      "primary": "#2e86ab",
+      "bgPage": "#eeeeee",
+      "groupBg": "#ffffff",
+      "groupOutline": "#cccccc"
+    },
+    "sizes": {
+      "pagePadding": "12px",
+      "groupGap": "12px",
+      "groupBorderRadius": "6px",
+      "widgetGap": "12px"
+    }
+  },
+  {
+    "id": "ui_page",
+    "type": "ui-page",
+    "name": "Bioreactor",
+    "ui": "ui_base",
+    "path": "/",
+    "icon": "flask",
+    "layout": "grid",
+    "theme": "ui_theme",
+    "order": 1,
+    "className": "",
+    "visible": "true",
+    "disabled": "false"
+  },
+  {
+    "id": "grp_status",
+    "type": "ui-group",
+    "name": "Status",
+    "page": "ui_page",
+    "width": "12",
+    "height": "1",
+    "order": 0,
+    "showTitle": true,
+    "className": "",
+    "visible": "true",
+    "disabled": "false"
+  },
+  {
+    "id": "grp_temperature",
+    "type": "ui-group",
+    "name": "Temperature",
+    "page": "ui_page",
+    "width": "4",
+    "height": "1",
+    "order": 1,
+    "showTitle": true,
+    "className": "",
+    "visible": "true",
+    "disabled": "false"
+  },
+  {
+    "id": "grp_ph",
+    "type": "ui-group",
+    "name": "pH",
+    "page": "ui_page",
+    "width": "4",
+    "height": "1",
+    "order": 2,
+    "showTitle": true,
+    "className": "",
+    "visible": "true",
+    "disabled": "false"
+  },
+  {
+    "id": "grp_rpm",
+    "type": "ui-group",
+    "name": "Stirring speed",
+    "page": "ui_page",
+    "width": "4",
+    "height": "1",
+    "order": 3,
+    "showTitle": true,
+    "className": "",
+    "visible": "true",
+    "disabled": "false"
+  },
+  {
+    "id": "tab_bioreactor",
+    "type": "tab",
+    "label": "Bioreactor dashboard",
+    "disabled": false,
+    "info": "Topics live under `bioreactor/team13/` and must match TOPIC_BASE in arduino-nano.ino."
+  },
+  {
+    "id": "c_readme",
+    "type": "comment",
+    "z": "tab_bioreactor",
+    "name": "Topics: bioreactor/team13/telemetry/<x>, bioreactor/team13/setpoint/<x>, bioreactor/team13/status",
+    "info": "",
+    "x": 330,
+    "y": 40,
+    "wires": []
+  },
+  {
+    "id": "mqtt_tele",
+    "type": "mqtt in",
+    "z": "tab_bioreactor",
+    "name": "Telemetry in",
+    "topic": "bioreactor/team13/telemetry/#",
+    "qos": "0",
+    "datatype": "auto-detect",
+    "broker": "broker",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 130,
+    "y": 140,
+    "wires": [
+      [
+        "route_tele"
+      ]
+    ]
+  },
+  {
+    "id": "route_tele",
+    "type": "function",
+    "z": "tab_bioreactor",
+    "name": "Route by parameter",
+    "func": "// Topic is bioreactor/<team>/telemetry/<param>\nconst param = msg.topic.split('/').pop();\nconst order = [\"temperature\", \"ph\", \"rpm\"];\nconst idx = order.indexOf(param);\nif (idx === -1) return null;\n// Accept either {\"value\": 30.1} or a bare number\nlet v = (msg.payload !== null && typeof msg.payload === 'object')\n    ? msg.payload.value : msg.payload;\nv = Number(v);\nif (!Number.isFinite(v)) return null;\nconst out = new Array(order.length).fill(null);\nout[idx] = { topic: param, payload: v };\nreturn out;\n",
+    "outputs": 3,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 340,
+    "y": 140,
+    "wires": [
+      [
+        "chart_temperature",
+        "text_temperature"
+      ],
+      [
+        "chart_ph",
+        "text_ph"
+      ],
+      [
+        "chart_rpm",
+        "text_rpm"
+      ]
+    ]
+  },
+  {
+    "id": "chart_temperature",
+    "type": "ui-chart",
+    "z": "tab_bioreactor",
+    "group": "grp_temperature",
+    "name": "Temperature chart",
+    "label": "Temperature (°C)",
+    "order": 2,
+    "chartType": "line",
+    "category": "topic",
+    "categoryType": "msg",
+    "xAxisLabel": "",
+    "xAxisProperty": "",
+    "xAxisPropertyType": "timestamp",
+    "xAxisType": "time",
+    "xAxisFormat": "",
+    "xAxisFormatType": "auto",
+    "yAxisLabel": "°C",
+    "yAxisProperty": "payload",
+    "yAxisPropertyType": "msg",
+    "ymin": "",
+    "ymax": "",
+    "action": "append",
+    "stackSeries": false,
+    "pointShape": "false",
+    "pointRadius": 0,
+    "showLegend": false,
+    "removeOlder": "10",
+    "removeOlderUnit": "60",
+    "removeOlderPoints": "",
+    "colors": [
+      "#e4572e",
+      "#aec7e8",
+      "#ff7f0e",
+      "#2ca02c",
+      "#98df8a",
+      "#d62728",
+      "#ff9896",
+      "#9467bd",
+      "#c5b0d5"
+    ],
+    "textColor": [
+      "#666666"
+    ],
+    "textColorDefault": true,
+    "gridColor": [
+      "#e5e5e5"
+    ],
+    "gridColorDefault": true,
+    "width": "4",
+    "height": "4",
+    "className": "",
+    "interpolation": "linear",
+    "x": 600,
+    "y": 100,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "text_temperature",
+    "type": "ui-text",
+    "z": "tab_bioreactor",
+    "group": "grp_temperature",
+    "order": 1,
+    "width": "4",
+    "height": "1",
+    "name": "Temperature now",
+    "label": "Current",
+    "format": "{{msg.payload}} °C",
+    "layout": "row-spread",
+    "style": false,
+    "font": "",
+    "fontSize": 16,
+    "color": "#333333",
+    "wrapText": false,
+    "className": "",
+    "value": "payload",
+    "valueType": "msg",
+    "x": 800,
+    "y": 100,
+    "wires": []
+  },
+  {
+    "id": "chart_ph",
+    "type": "ui-chart",
+    "z": "tab_bioreactor",
+    "group": "grp_ph",
+    "name": "pH chart",
+    "label": "pH (pH)",
+    "order": 2,
+    "chartType": "line",
+    "category": "topic",
+    "categoryType": "msg",
+    "xAxisLabel": "",
+    "xAxisProperty": "",
+    "xAxisPropertyType": "timestamp",
+    "xAxisType": "time",
+    "xAxisFormat": "",
+    "xAxisFormatType": "auto",
+    "yAxisLabel": "pH",
+    "yAxisProperty": "payload",
+    "yAxisPropertyType": "msg",
+    "ymin": "",
+    "ymax": "",
+    "action": "append",
+    "stackSeries": false,
+    "pointShape": "false",
+    "pointRadius": 0,
+    "showLegend": false,
+    "removeOlder": "10",
+    "removeOlderUnit": "60",
+    "removeOlderPoints": "",
+    "colors": [
+      "#2e86ab",
+      "#aec7e8",
+      "#ff7f0e",
+      "#2ca02c",
+      "#98df8a",
+      "#d62728",
+      "#ff9896",
+      "#9467bd",
+      "#c5b0d5"
+    ],
+    "textColor": [
+      "#666666"
+    ],
+    "textColorDefault": true,
+    "gridColor": [
+      "#e5e5e5"
+    ],
+    "gridColorDefault": true,
+    "width": "4",
+    "height": "4",
+    "className": "",
+    "interpolation": "linear",
+    "x": 600,
+    "y": 160,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "text_ph",
+    "type": "ui-text",
+    "z": "tab_bioreactor",
+    "group": "grp_ph",
+    "order": 1,
+    "width": "4",
+    "height": "1",
+    "name": "pH now",
+    "label": "Current",
+    "format": "{{msg.payload}} pH",
+    "layout": "row-spread",
+    "style": false,
+    "font": "",
+    "fontSize": 16,
+    "color": "#333333",
+    "wrapText": false,
+    "className": "",
+    "value": "payload",
+    "valueType": "msg",
+    "x": 800,
+    "y": 160,
+    "wires": []
+  },
+  {
+    "id": "chart_rpm",
+    "type": "ui-chart",
+    "z": "tab_bioreactor",
+    "group": "grp_rpm",
+    "name": "Stirring speed chart",
+    "label": "Stirring speed (RPM)",
+    "order": 2,
+    "chartType": "line",
+    "category": "topic",
+    "categoryType": "msg",
+    "xAxisLabel": "",
+    "xAxisProperty": "",
+    "xAxisPropertyType": "timestamp",
+    "xAxisType": "time",
+    "xAxisFormat": "",
+    "xAxisFormatType": "auto",
+    "yAxisLabel": "RPM",
+    "yAxisProperty": "payload",
+    "yAxisPropertyType": "msg",
+    "ymin": "",
+    "ymax": "",
+    "action": "append",
+    "stackSeries": false,
+    "pointShape": "false",
+    "pointRadius": 0,
+    "showLegend": false,
+    "removeOlder": "10",
+    "removeOlderUnit": "60",
+    "removeOlderPoints": "",
+    "colors": [
+      "#3bb273",
+      "#aec7e8",
+      "#ff7f0e",
+      "#2ca02c",
+      "#98df8a",
+      "#d62728",
+      "#ff9896",
+      "#9467bd",
+      "#c5b0d5"
+    ],
+    "textColor": [
+      "#666666"
+    ],
+    "textColorDefault": true,
+    "gridColor": [
+      "#e5e5e5"
+    ],
+    "gridColorDefault": true,
+    "width": "4",
+    "height": "4",
+    "className": "",
+    "interpolation": "linear",
+    "x": 600,
+    "y": 220,
+    "wires": [
+      []
+    ]
+  },
+  {
+    "id": "text_rpm",
+    "type": "ui-text",
+    "z": "tab_bioreactor",
+    "group": "grp_rpm",
+    "order": 1,
+    "width": "4",
+    "height": "1",
+    "name": "Stirring speed now",
+    "label": "Current",
+    "format": "{{msg.payload}} RPM",
+    "layout": "row-spread",
+    "style": false,
+    "font": "",
+    "fontSize": 16,
+    "color": "#333333",
+    "wrapText": false,
+    "className": "",
+    "value": "payload",
+    "valueType": "msg",
+    "x": 800,
+    "y": 220,
+    "wires": []
+  },
+  {
+    "id": "mqtt_sp_in",
+    "type": "mqtt in",
+    "z": "tab_bioreactor",
+    "name": "Setpoints in (sync sliders)",
+    "topic": "bioreactor/team13/setpoint/#",
+    "qos": "1",
+    "datatype": "auto-detect",
+    "broker": "broker",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 160,
+    "y": 340,
+    "wires": [
+      [
+        "route_sp"
+      ]
+    ]
+  },
+  {
+    "id": "route_sp",
+    "type": "function",
+    "z": "tab_bioreactor",
+    "name": "Route setpoint",
+    "func": "const param = msg.topic.split('/').pop();\nconst order = [\"temperature\", \"ph\", \"rpm\"];\nconst idx = order.indexOf(param);\nconst v = Number(msg.payload);\nif (idx === -1 || !Number.isFinite(v)) return null;\nconst out = new Array(order.length).fill(null);\nout[idx] = { payload: v };\nreturn out;\n",
+    "outputs": 3,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 380,
+    "y": 340,
+    "wires": [
+      [
+        "slider_temperature"
+      ],
+      [
+        "slider_ph"
+      ],
+      [
+        "slider_rpm"
+      ]
+    ]
+  },
+  {
+    "id": "slider_temperature",
+    "type": "ui-slider",
+    "z": "tab_bioreactor",
+    "group": "grp_temperature",
+    "name": "Temperature target",
+    "label": "Target (°C)",
+    "tooltip": "",
+    "order": 3,
+    "width": "4",
+    "height": "1",
+    "passthru": false,
+    "outs": "end",
+    "topic": "bioreactor/team13/setpoint/temperature",
+    "topicType": "str",
+    "thumbLabel": "true",
+    "showTicks": "false",
+    "min": "20",
+    "max": "40",
+    "step": "0.5",
+    "className": "",
+    "iconPrepend": "",
+    "iconAppend": "",
+    "color": "",
+    "colorTrack": "",
+    "colorThumb": "",
+    "showTextField": true,
+    "x": 600,
+    "y": 300,
+    "wires": [
+      [
+        "mqtt_sp_out"
+      ]
+    ]
+  },
+  {
+    "id": "slider_ph",
+    "type": "ui-slider",
+    "z": "tab_bioreactor",
+    "group": "grp_ph",
+    "name": "pH target",
+    "label": "Target (pH)",
+    "tooltip": "",
+    "order": 3,
+    "width": "4",
+    "height": "1",
+    "passthru": false,
+    "outs": "end",
+    "topic": "bioreactor/team13/setpoint/ph",
+    "topicType": "str",
+    "thumbLabel": "true",
+    "showTicks": "false",
+    "min": "3",
+    "max": "9",
+    "step": "0.1",
+    "className": "",
+    "iconPrepend": "",
+    "iconAppend": "",
+    "color": "",
+    "colorTrack": "",
+    "colorThumb": "",
+    "showTextField": true,
+    "x": 600,
+    "y": 360,
+    "wires": [
+      [
+        "mqtt_sp_out"
+      ]
+    ]
+  },
+  {
+    "id": "slider_rpm",
+    "type": "ui-slider",
+    "z": "tab_bioreactor",
+    "group": "grp_rpm",
+    "name": "Stirring speed target",
+    "label": "Target (RPM)",
+    "tooltip": "",
+    "order": 3,
+    "width": "4",
+    "height": "1",
+    "passthru": false,
+    "outs": "end",
+    "topic": "bioreactor/team13/setpoint/rpm",
+    "topicType": "str",
+    "thumbLabel": "true",
+    "showTicks": "false",
+    "min": "0",
+    "max": "1500",
+    "step": "50",
+    "className": "",
+    "iconPrepend": "",
+    "iconAppend": "",
+    "color": "",
+    "colorTrack": "",
+    "colorThumb": "",
+    "showTextField": true,
+    "x": 600,
+    "y": 420,
+    "wires": [
+      [
+        "mqtt_sp_out"
+      ]
+    ]
+  },
+  {
+    "id": "mqtt_sp_out",
+    "type": "mqtt out",
+    "z": "tab_bioreactor",
+    "name": "Setpoint out (retained)",
+    "topic": "",
+    "qos": "1",
+    "retain": "true",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "broker",
+    "x": 850,
+    "y": 360,
+    "wires": []
+  },
+  {
+    "id": "mqtt_status",
+    "type": "mqtt in",
+    "z": "tab_bioreactor",
+    "name": "Device status",
+    "topic": "bioreactor/team13/status",
+    "qos": "1",
+    "datatype": "utf8",
+    "broker": "broker",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 130,
+    "y": 500,
+    "wires": [
+      [
+        "text_status"
+      ]
+    ]
+  },
+  {
+    "id": "text_status",
+    "type": "ui-text",
+    "z": "tab_bioreactor",
+    "group": "grp_status",
+    "order": 1,
+    "width": "12",
+    "height": "1",
+    "name": "Status text",
+    "label": "ESP32",
+    "format": "{{msg.payload}}",
+    "layout": "row-left",
+    "style": false,
+    "font": "",
+    "fontSize": 16,
+    "color": "#333333",
+    "wrapText": false,
+    "className": "",
+    "value": "payload",
+    "valueType": "msg",
+    "x": 340,
+    "y": 500,
+    "wires": []
+  },
+  {
+    "id": "c_sim",
+    "type": "comment",
+    "z": "tab_bioreactor",
+    "name": "SIMULATOR: disable this group once the ESP32 is publishing",
+    "info": "",
+    "x": 260,
+    "y": 580,
+    "wires": []
+  },
+  {
+    "id": "sim_tick",
+    "type": "inject",
+    "z": "tab_bioreactor",
+    "name": "Every 2 s",
+    "props": [
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "2",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "1",
+    "topic": "bioreactor/team13/telemetry/",
+    "x": 130,
+    "y": 630,
+    "wires": [
+      [
+        "sim_fn"
+      ]
+    ]
+  },
+  {
+    "id": "sim_fn",
+    "type": "function",
+    "z": "tab_bioreactor",
+    "name": "Fake sensors",
+    "func": "// Fake bioreactor: drifts each value toward its setpoint with noise.\n// Disable or delete this once the real ESP32 is publishing.\nconst sp = flow.get('sim_sp') || {\"temperature\": 30.0, \"ph\": 6.0, \"rpm\": 750.0};\nconst st = flow.get('sim_state') || Object.assign({}, sp);\nconst noise = {\"temperature\": 0.1, \"ph\": 0.02, \"rpm\": 10};\n// Topic prefix comes from the inject node's Topic field\nconst prefix = msg.topic.endsWith('/') ? msg.topic : msg.topic + '/';\nconst msgs = [];\nfor (const k of Object.keys(st)) {\n    st[k] += 0.2 * (sp[k] - st[k]) + (Math.random() - 0.5) * 2 * noise[k];\n    msgs.push({ topic: prefix + k,\n                 payload: { value: Math.round(st[k] * 100) / 100, ts: Date.now() } });\n}\nflow.set('sim_state', st);\nreturn [msgs];\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 320,
+    "y": 630,
+    "wires": [
+      [
+        "sim_out"
+      ]
+    ]
+  },
+  {
+    "id": "sim_out",
+    "type": "mqtt out",
+    "z": "tab_bioreactor",
+    "name": "Publish fake telemetry",
+    "topic": "",
+    "qos": "0",
+    "retain": "false",
+    "respTopic": "",
+    "contentType": "",
+    "userProps": "",
+    "correl": "",
+    "expiry": "",
+    "broker": "broker",
+    "x": 540,
+    "y": 630,
+    "wires": []
+  },
+  {
+    "id": "sim_status",
+    "type": "inject",
+    "z": "tab_bioreactor",
+    "name": "status = simulated",
+    "props": [
+      {
+        "p": "payload"
+      },
+      {
+        "p": "topic",
+        "vt": "str"
+      }
+    ],
+    "repeat": "",
+    "crontab": "",
+    "once": true,
+    "onceDelay": "1",
+    "topic": "bioreactor/team13/status",
+    "payload": "simulated",
+    "payloadType": "str",
+    "x": 160,
+    "y": 680,
+    "wires": [
+      [
+        "sim_out"
+      ]
+    ]
+  },
+  {
+    "id": "sim_sp_in",
+    "type": "mqtt in",
+    "z": "tab_bioreactor",
+    "name": "Simulator setpoints",
+    "topic": "bioreactor/team13/setpoint/#",
+    "qos": "1",
+    "datatype": "auto-detect",
+    "broker": "broker",
+    "nl": false,
+    "rap": true,
+    "rh": 0,
+    "inputs": 0,
+    "x": 150,
+    "y": 730,
+    "wires": [
+      [
+        "sim_sp_fn"
+      ]
+    ]
+  },
+  {
+    "id": "sim_sp_fn",
+    "type": "function",
+    "z": "tab_bioreactor",
+    "name": "Store setpoint",
+    "func": "// Simulator listens to setpoints too, like the real ESP32 would.\nconst k = msg.topic.split('/').pop();\nconst sp = flow.get('sim_sp') || {\"temperature\": 30.0, \"ph\": 6.0, \"rpm\": 750.0};\nconst v = Number(msg.payload);\nif (k in sp && Number.isFinite(v)) { sp[k] = v; flow.set('sim_sp', sp); }\nreturn null;\n",
+    "outputs": 1,
+    "timeout": 0,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "x": 360,
+    "y": 730,
+    "wires": [
+      []
+    ]
+  }
+]

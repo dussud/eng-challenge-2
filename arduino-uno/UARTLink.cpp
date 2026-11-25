@@ -1,7 +1,7 @@
 #include "UARTLink.h"
 #include <SoftwareSerial.h>
 
-static const uint8_t LINK_RX_PIN = 2;  // to ESP32 D1 (TX)
+static const uint8_t LINK_RX_PIN = 7;  // to ESP32 D1 (TX). Not D2: that is the stirring interrupt
 static const uint8_t LINK_TX_PIN = 3;  // to ESP32 D0 (RX) via divider
 static const long LINK_BAUD = 9600;
 
